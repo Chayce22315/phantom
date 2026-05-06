@@ -1,0 +1,54 @@
+name: Build PHANTOM IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (no signing)
+        run: |
+          xcodebuild \
+            -project PHANTOM.xcodeproj \
+            -scheme PHANTOM \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination generic/platform=iOS \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            ONLY_ACTIVE_ARCH=NO \
+            BUILD_DIR="${{ github.workspace }}/build" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH=$(find "${{ github.workspace }}/build" -name "PHANTOM.app" | head -1)
+          echo "Found app at: $APP_PATH"
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/PHANTOM.app
+          zip -r PHANTOM-unsigned.ipa Payload
+          echo "IPA created: $(du -sh PHANTOM-unsigned.ipa)"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PHANTOM-unsigned-ipa
+          path: PHANTOM-unsigned.ipa
+          retention-days: 30
